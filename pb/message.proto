@@ -1,0 +1,106 @@
+syntax = "proto3";
+
+option go_package "datingapp/pb";
+
+service DatingAppService {
+    //
+    // Match Operations
+    //
+    
+    // The list of matches the user paired with (ie, they won a competition)
+    rpc GetAllMatches(MatchRequest) returns (stream MatchResponse);
+
+    // User searches through unmatched possibilities, the user rates each possibity. 
+    rpc FindContestants(stream SearchRequest) returns (stream ContestantResponse);
+
+    //
+    // Game Operations
+    //
+
+    // Games only selects players from the Contenstant pool. 
+    // Ie, you only play with people you said you'd like to get to know
+    // better.
+    rpc StartGame(StartGameRequest) returns (stream StartGameResponse);
+    //
+    rpc PlayRound(PlayRoundRequest) returns (PlayRoundResponse);
+    // Can time out.  
+    rpc SendQuestion(QuestionRequest) returns (stream QuestionResponse);
+    // Removes one contestant from the game.
+    rpc EliminateDate(EliminateRequest) returns (EliminateResponse);
+    // 
+    rpc EndGame(EndGameRequest) returns (EndGameResponse);
+    
+
+    //
+    // Chat Operations
+    //
+
+    rpc Chat(stream ChatRequest) returns (stream ChatResponse);
+
+    //
+    // Profile Editing Operations
+    //
+
+    rpc UploadPicture(stream AddPhotoRequest) returns (AddPhotoResponse);
+    rpc UpdateProfile(ProfileRequest) returns (ProfileResponse);
+    rpc UpdateFilters(FilterRequest) returns (FilterResponse);
+}
+
+
+message MatchRequest {
+
+}
+message MatchResponse {
+
+}
+
+message SearchRequest{
+
+}
+message SearchResponse {
+
+}
+
+message StartGameRequest {
+
+}
+message StartGameResponse {
+
+}
+
+message PlayRoundRequest {
+
+}
+message PlayRoundResponse {
+
+}
+
+message QuestionRequest {
+
+}
+message QuestionResponse {
+
+}
+
+message EndGameRequest {
+
+}
+
+message ContestantProfile {
+    Contestant contestant = 1;
+}
+
+message ChatRequest {
+    Message message = 1;
+}
+message ChatResponse {
+    Message message = 1;
+}
+
+message FilterRequest {
+
+}
+message FilterResponse {
+
+}
+
