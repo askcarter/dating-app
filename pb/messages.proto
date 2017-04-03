@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+// option go_package = "datingapp/pb";
+package helloworld;
+
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  string message = 1;
+}
+
+
+message User {
+  int64 iD = 1;
+  string displayName = 2;
+  repeated int64 matches = 3;
+}
+
+// The request message containing the user's name.
+message DebugListUsersRequest {
+}
+
+// The response message containing the greetings
+message DebugListUsersReply {
+  repeated User users = 1;
+}
+
+service DatingGame {
+  rpc DebugListUsers (DebugListUsersRequest) returns (DebugListUsersReply) {}
+}

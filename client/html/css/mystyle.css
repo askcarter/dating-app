@@ -1,0 +1,25 @@
+#columns{
+    display: table;
+    width: 100%;
+}
+
+div {
+    border:1px solid black;
+}
+
+.col1{
+    display: table-cell;
+    width: 65%;
+    padding: 1em;
+    position: relative;
+    left: auto;
+    background-color:black;
+    color:white;
+}
+
+.col2{
+    width: 35%;
+    display: table-cell;
+    padding: 1em;
+    position: relative;
+}
