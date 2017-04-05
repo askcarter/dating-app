@@ -100,6 +100,8 @@ func (s *chatServer) Chat(ctx context.Context, in *pb.ChatRequest) (*pb.ChatResp
 func main() {
 	errChan := make(chan error, 10)
 
+	flag.Parse()
+
 	// Setup Frontend Server
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("./html")))
@@ -127,7 +129,7 @@ func main() {
 	// c := pb.NewGreeterClient(conn)
 
 	// Set up chat server.
-	lis, err := net.Listen("tcp", *chat)
+	lis, err := net.Listen("tcp", "localhost"+*chat)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

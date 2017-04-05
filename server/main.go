@@ -134,7 +134,10 @@ func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*p
 	defer conn.Close()
 
 	// Store message in spanner for later retrieval by clients.
-	// ...
+	err = s.storeChatInDB(to, from, in)
+	if err != nil {
+		log.Fatal("error storing chat in DB:", err)
+	}
 
 	// Send message to client chat server.
 	c := pb.NewClientChatClient(conn)
@@ -144,6 +147,132 @@ func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*p
 	return c.Chat(newCtx, &pb.ChatRequest{Message: in.Message})
 
 	// return &pb.ChatResponse{}, nil
+}
+
+func (s *datingGameServer) ChatHistory(ctx context.Context, in *pb.HistoryRequest) (*pb.HistoryResponse, error) {
+	client, err := spanner.NewClient(ctx, "projects/askcarter-talks/instances/test-instance/databases/test-dating-game")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	// 	CREATE TABLE chat (
+	//   id INT64 NOT NULL,
+	//   mark STRING(64) NOT NULL,
+	//   sender STRING(64) NOT NULL,
+	//   message STRING(MAX) NOT NULL,
+	//   timestamp_created INT64 NOT NULL,
+	// ) PRIMARY KEY(id);
+
+	// iter := client.Single().Read(ctx, "test_chat", spanner.AllKeys(),
+	// 	[]string{"timestamp_created", "sender", "message"})
+
+	md, ok := metadata.FromContext(ctx)
+	if !ok {
+		log.Fatal("no metadata")
+	}
+	mark := md["mark"][0]
+	fmt.Println("key:", mark)
+
+	stmt := spanner.NewStatement("SELECT timestamp_created, sender, message FROM test_chat WHERE mark = @key")
+	stmt.Params["key"] = mark
+	iter := client.Single().Query(ctx, stmt)
+
+	defer iter.Stop()
+
+	var chats = []*pb.ChatRequest{}
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var chat pb.ChatRequest
+		if err := row.Columns(&chat.TimestampCreated, &chat.Sender, &chat.Message); err != nil {
+			return nil, err
+		}
+
+		chats = append(chats, &chat)
+	}
+
+	return &pb.HistoryResponse{ChatHistory: chats}, nil
+}
+
+// This operates as a hacky GUUID for chats. This doesn't scale, as there no mutex around it.
+var numChats = 0
+
+func getSizeOfTable(ctx context.Context, db string) (int, error) {
+	client, err := spanner.NewClient(ctx, "projects/askcarter-talks/instances/test-instance/databases/test-dating-game")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	iter := client.Single().Read(ctx, db, spanner.AllKeys(),
+		[]string{"timestamp_created", "sender", "message"})
+	defer iter.Stop()
+
+	numRows := 1
+	for {
+		_, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		numRows++
+	}
+	return numRows, nil
+}
+
+// Store message in spanner for later retrieval by clients.
+func (s *datingGameServer) storeChatInDB(to, from string, msg *pb.ChatRequest) error {
+	ctx, _ := context.WithTimeout(context.Background(), 1*time.Minute)
+
+	client, err := spanner.NewClient(ctx, "projects/askcarter-talks/instances/test-instance/databases/test-dating-game")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	// Create a User for every planet (and pluto?).  Each planet matches with the planet adjacent to it.
+	ids := map[string]int{
+		"Mercury": 1,
+		"Venus":   2,
+		"Earth":   3,
+		"Mars":    4,
+		"Jupiter": 5,
+		"Saturn":  6,
+		"Uranus":  7,
+		"Neptune": 8,
+		"Pluto":   9,
+	}
+
+	toID := ids[to]
+	fromID := ids[from]
+
+	mark := ""
+	if toID < fromID {
+		mark = to + "#" + from
+	} else {
+		mark = from + "#" + to
+	}
+	chatColumns := []string{"id", "mark", "sender", "message", "timestamp_created"}
+
+	if numChats == 0 {
+		numChats, _ = getSizeOfTable(ctx, "test_chat")
+	}
+	m := []*spanner.Mutation{
+		spanner.InsertOrUpdate("test_chat", chatColumns, []interface{}{numChats, mark, from, msg.Message, time.Now().Unix()}),
+	}
+
+	_, err = client.Apply(ctx, m)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return nil
 }
 
 func main() {

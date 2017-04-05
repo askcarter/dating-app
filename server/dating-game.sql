@@ -12,5 +12,5 @@ CREATE TABLE chat (
   sender STRING(64) NOT NULL,
   message STRING(MAX) NOT NULL,
   timestamp_created INT64 NOT NULL,
-) PRIMARY KEY(id);
+) PRIMARY KEY(mark, timestamp_created DESC);
 

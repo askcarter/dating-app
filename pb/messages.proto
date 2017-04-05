@@ -34,25 +34,26 @@ message DebugListUsersResponse {
 
 message ChatRequest {
   string message = 1;
-  int64 timestamp_created = 2;  // UTC seconds since epoch
+  string sender = 2;
+  int64 timestamp_created = 3;  // UTC seconds since epoch
 }
 
 message ChatResponse {
 }
 
+
+message HistoryRequest {
+}
+
+message HistoryResponse {
+  repeated ChatRequest chatHistory = 1;    
+}
 service DatingGame {
   rpc DebugListUsers (DebugListUsersRequest) returns (DebugListUsersResponse) {}
   rpc SendChat(ChatRequest) returns (ChatResponse) {}
+  rpc ChatHistory (HistoryRequest) returns (HistoryResponse) {}
 }
-
-// message HistoryRequest {
-// }
-
-// message HistoryResponse {
-//   repeated int64 matches = 3;    
-// }
 
 service ClientChat {
     rpc Chat (ChatRequest) returns (ChatResponse) {}
-    // rpc GetHistory (HistoryRequest) return (HistoryResponse) {}
 }
