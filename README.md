@@ -15,7 +15,7 @@ go get -u github.com/golang/protobuf/proto
 go get -u github.com/golang/protobuf/protoc-gen-go
 
 ### Compile the source
-protoc -I ./pb ./pb/messages.proto --go_out=plugins=grpc:./src 
+protoc -I ./pb ./pb/messages.proto --go_out=plugins=grpc:./PB 
 
 ### Use gRPC_CLI and Server Reflection to debug
 had to use https://github.com/grpc/homebrew-grpc to build (and add a few libs)
@@ -24,3 +24,7 @@ https://chromium.googlesource.com/external/github.com/grpc/grpc-go/+/refs/heads/
 
 ### go generate?
 https://blog.golang.org/generate
+
+### gRPC tracing
+https://rakyll.org/grpc-trace/
+

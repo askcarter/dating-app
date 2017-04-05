@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +16,8 @@ import (
 	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/reflection"
 
 	pb "github.com/askcarter/dating-game/pb"
 	"github.com/askcarter/io16/app/handlers"
@@ -29,6 +32,7 @@ const (
 
 var (
 	port = flag.String("port", ":8081", "which port to client on")
+	chat = flag.String("chat", ":18081", "which port to chat on")
 )
 
 type route struct {
@@ -80,6 +84,19 @@ func logger(inner http.Handler, name string) http.Handler {
 	})
 }
 
+// chatServer is used to implement helloworld.chatServer.
+type chatServer struct{}
+
+func (s *chatServer) Chat(ctx context.Context, in *pb.ChatRequest) (*pb.ChatResponse, error) {
+	md, ok := metadata.FromContext(ctx)
+	if !ok {
+		log.Fatal("no metadata")
+	}
+	from := md["from"][0]
+	fmt.Printf("%v: %v\n", from, in.Message)
+	return &pb.ChatResponse{}, nil
+}
+
 func main() {
 	errChan := make(chan error, 10)
 
@@ -101,19 +118,42 @@ func main() {
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
-	defer conn.Close()
-	c := pb.NewGreeterClient(conn)
+	fmt.Println("Connected to server server on " + address)
 
-	// Contact the server and print out its response.
-	name := defaultName
-	if len(os.Args) > 1 {
-		name = os.Args[1]
-	}
-	req, err := c.SayHello(context.Background(), &pb.HelloRequest{Name: name})
+	defer func() {
+		fmt.Println("Closing connection to server server on " + address)
+		conn.Close()
+	}()
+	// c := pb.NewGreeterClient(conn)
+
+	// Set up chat server.
+	lis, err := net.Listen("tcp", *chat)
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		log.Fatalf("failed to listen: %v", err)
 	}
-	log.Printf("Greeting: %s", req.Message)
+
+	s := grpc.NewServer()
+	/* TODO: should I gracefully shut down server with s.Stop() or s.GracefulStop()? */
+
+	pb.RegisterClientChatServer(s, &chatServer{})
+	// Register reflection service on gRPC server.
+	reflection.Register(s)
+
+	go func() {
+		errChan <- s.Serve(lis)
+	}()
+	fmt.Println("Chat server started on http://localhost" + *chat)
+
+	// // Contact the server and print out its response.
+	// name := defaultName
+	// if len(os.Args) > 1 {
+	// 	name = os.Args[1]
+	// }
+	// req, err := c.SayHello(context.Background(), &pb.HelloRequest{Name: name})
+	// if err != nil {
+	// 	log.Fatalf("could not greet: %v", err)
+	// }
+	// log.Printf("Greeting: %s", req.Message)
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)

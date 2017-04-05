@@ -25,15 +25,34 @@ message User {
   repeated int64 matches = 3;
 }
 
-// The request message containing the user's name.
 message DebugListUsersRequest {
 }
 
-// The response message containing the greetings
-message DebugListUsersReply {
+message DebugListUsersResponse {
   repeated User users = 1;
 }
 
+message ChatRequest {
+  string message = 1;
+  int64 timestamp_created = 2;  // UTC seconds since epoch
+}
+
+message ChatResponse {
+}
+
 service DatingGame {
-  rpc DebugListUsers (DebugListUsersRequest) returns (DebugListUsersReply) {}
+  rpc DebugListUsers (DebugListUsersRequest) returns (DebugListUsersResponse) {}
+  rpc SendChat(ChatRequest) returns (ChatResponse) {}
+}
+
+// message HistoryRequest {
+// }
+
+// message HistoryResponse {
+//   repeated int64 matches = 3;    
+// }
+
+service ClientChat {
+    rpc Chat (ChatRequest) returns (ChatResponse) {}
+    // rpc GetHistory (HistoryRequest) return (HistoryResponse) {}
 }

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/context"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/askcarter/dating-game/pb"
@@ -38,7 +39,7 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 // datingGameServer is used to implement helloworld.datingGameServer.
 type datingGameServer struct{}
 
-func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListUsersRequest) (*pb.DebugListUsersReply, error) {
+func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListUsersRequest) (*pb.DebugListUsersResponse, error) {
 	// Create a User for every planet (and pluto?).  Each planet matches with the planet adjacent to it.
 	// var users = []*pb.User{
 	// 	{ID: 1, DisplayName: "Mercury", Matches: []int64{2}},
@@ -52,7 +53,7 @@ func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListU
 	// 	{ID: 9, DisplayName: "Pluto", Matches: []int64{8}},
 	// }
 
-	// ctx, _ := context.WithTimeout(context.Background(), 1*time.Minute)
+	// ctx, _ := context.WithTimeout(ctx, 1*time.Minute)
 
 	client, err := spanner.NewClient(ctx, "projects/askcarter-talks/instances/test-instance/databases/test-dating-game")
 	if err != nil {
@@ -87,7 +88,62 @@ func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListU
 		users = append(users, &user)
 	}
 
-	return &pb.DebugListUsersReply{Users: users}, nil
+	return &pb.DebugListUsersResponse{Users: users}, nil
+}
+
+func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*pb.ChatResponse, error) {
+	/* TODO: Turn this into a list of open connections (added when users connect)
+	   and switch to streaming API. Remove connections when client disconnects. */
+	ips := map[string]string{
+		"Mercury": "localhost:18081",
+		"Venus":   "localhost:18082",
+		"Earth":   "localhost:18083",
+		"Mars":    "localhost:18084",
+		"Jupiter": "localhost:18085",
+		"Saturn":  "localhost:18086",
+		"Uranus":  "localhost:18087",
+		"Neptune": "localhost:18088",
+		"Pluto":   "localhost:18089",
+	}
+
+	// // streaming api
+	// headers, ok := metadata.FromContext(stream.Context())
+	// token := headers["authorization"]
+	// for {
+	//     request := new(Request)
+	//     err := stream.RecvMsg(request)
+	//     // do work
+	//     err := stream.SendMsg(response)
+	// }
+
+	md, ok := metadata.FromContext(ctx)
+	if !ok {
+		log.Fatal("no metadata")
+	}
+	to := md["to"][0]
+	from := md["from"][0]
+	fmt.Printf(" (%v -> %v): %#v\n", from, to, in.Message)
+
+	address := ips[to]
+
+	// Setup connection to chat server
+	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+
+	// Store message in spanner for later retrieval by clients.
+	// ...
+
+	// Send message to client chat server.
+	c := pb.NewClientChatClient(conn)
+	header := metadata.New(map[string]string{"from": from})
+	// this is the critical step that includes your headers
+	newCtx := metadata.NewContext(ctx, header)
+	return c.Chat(newCtx, &pb.ChatRequest{Message: in.Message})
+
+	// return &pb.ChatResponse{}, nil
 }
 
 func main() {
@@ -106,11 +162,14 @@ func main() {
 	pb.RegisterDatingGameServer(s, &datingGameServer{})
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
+	/* TODO: should I gracefully shut down server with s.Stop() or s.GracefulStop()? */
 
 	go func() {
 		errChan <- s.Serve(lis)
 	}()
+	fmt.Println("Server started on http://localhost" + *port)
 
+	// TODO: remove once users can signup.
 	mockDatabase()
 
 	signalChan := make(chan os.Signal, 1)
