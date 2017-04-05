@@ -91,6 +91,9 @@ func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListU
 	return &pb.DebugListUsersResponse{Users: users}, nil
 }
 
+// SendChat takes a message from a client and sends it to another client.  The receiver is determined
+// by the metadata associated with the request.
+// TODO: Return different errors codes, based on results.
 func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*pb.ChatResponse, error) {
 	/* TODO: Turn this into a list of open connections (added when users connect)
 	   and switch to streaming API. Remove connections when client disconnects. */
@@ -116,6 +119,7 @@ func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*p
 	//     err := stream.SendMsg(response)
 	// }
 
+	// Retrieve metadata sent with this message.
 	md, ok := metadata.FromContext(ctx)
 	if !ok {
 		log.Fatal("no metadata")
@@ -149,6 +153,9 @@ func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*p
 	// return &pb.ChatResponse{}, nil
 }
 
+// ChatHistory returns the history between two clients. The pb.HistoryRequest metadata tells the server which
+// key to request. The key is in the format of '<lower id UserName>#<higher id UserName>'. For example, if there were
+// two users Mercury and Venus with IDs 1 and 2, respectively then the metadata sent over would be "key:Mercury:Venus".
 func (s *datingGameServer) ChatHistory(ctx context.Context, in *pb.HistoryRequest) (*pb.HistoryResponse, error) {
 	client, err := spanner.NewClient(ctx, "projects/askcarter-talks/instances/test-instance/databases/test-dating-game")
 	if err != nil {
@@ -156,28 +163,15 @@ func (s *datingGameServer) ChatHistory(ctx context.Context, in *pb.HistoryReques
 	}
 	defer client.Close()
 
-	// 	CREATE TABLE chat (
-	//   id INT64 NOT NULL,
-	//   mark STRING(64) NOT NULL,
-	//   sender STRING(64) NOT NULL,
-	//   message STRING(MAX) NOT NULL,
-	//   timestamp_created INT64 NOT NULL,
-	// ) PRIMARY KEY(id);
-
-	// iter := client.Single().Read(ctx, "test_chat", spanner.AllKeys(),
-	// 	[]string{"timestamp_created", "sender", "message"})
-
 	md, ok := metadata.FromContext(ctx)
 	if !ok {
 		log.Fatal("no metadata")
 	}
 	mark := md["mark"][0]
-	fmt.Println("key:", mark)
 
 	stmt := spanner.NewStatement("SELECT timestamp_created, sender, message FROM test_chat WHERE mark = @key")
 	stmt.Params["key"] = mark
 	iter := client.Single().Query(ctx, stmt)
-
 	defer iter.Stop()
 
 	var chats = []*pb.ChatRequest{}
@@ -226,7 +220,10 @@ func getSizeOfTable(ctx context.Context, db string) (int, error) {
 	return numRows, nil
 }
 
-// Store message in spanner for later retrieval by clients.
+// Store message in spanner for later retrieval by clients.  Messages between two clients are stored by concatenating
+// the name of the two clients, as such: The key is in the format of '<lower id UserName>#<higher id UserName>'.
+// For example, if there were two users Mercury and Venus with IDs 1 and 2, respectively then the metadata sent
+// over would be "key:Mercury:Venus".
 func (s *datingGameServer) storeChatInDB(to, from string, msg *pb.ChatRequest) error {
 	ctx, _ := context.WithTimeout(context.Background(), 1*time.Minute)
 
@@ -312,8 +309,6 @@ func main() {
 			}
 		case s := <-signalChan:
 			log.Println(fmt.Sprintf("Captured %v. Exiting...", s))
-			// httpServer.BlockingClose()
-
 			os.Exit(0)
 		}
 	}

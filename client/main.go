@@ -9,9 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
-
-	"github.com/gorilla/mux"
 
 	"golang.org/x/net/context"
 
@@ -35,58 +32,59 @@ var (
 	chat = flag.String("chat", ":18081", "which port to chat on")
 )
 
-type route struct {
-	Name, Method, Pattern string
-	Handler               http.HandlerFunc
-}
+// type route struct {
+// 	Name, Method, Pattern string
+// 	Handler               http.HandlerFunc
+// }
 
-const (
-	apiPrefix = "/api/v1"
-)
+// const (
+// 	apiPrefix = "/api/v1"
+// )
 
-var routes = []route{
-	route{
-		Name:    "CardIndex",
-		Method:  "GET",
-		Pattern: apiPrefix + "/cards",
-		Handler: nil,
-	},
-	route{
-		Name:    "Review",
-		Method:  "POST",
-		Pattern: apiPrefix + "/review/{value}",
-		// TODO: restrict path
-		// Pattern: apiPrefix + "/review/{value:^(accept|forgot)$}",
-		Handler: nil,
-	},
-	route{
-		Name:    "Save",
-		Method:  "POST",
-		Pattern: apiPrefix + "/save",
-		Handler: nil,
-	},
-}
+// var routes = []route{
+// 	route{
+// 		Name:    "CardIndex",
+// 		Method:  "GET",
+// 		Pattern: apiPrefix + "/cards",
+// 		Handler: nil,
+// 	},
+// 	route{
+// 		Name:    "Review",
+// 		Method:  "POST",
+// 		Pattern: apiPrefix + "/review/{value}",
+// 		// TODO: restrict path
+// 		// Pattern: apiPrefix + "/review/{value:^(accept|forgot)$}",
+// 		Handler: nil,
+// 	},
+// 	route{
+// 		Name:    "Save",
+// 		Method:  "POST",
+// 		Pattern: apiPrefix + "/save",
+// 		Handler: nil,
+// 	},
+// }
 
-func newRouter() *mux.Router {
-	router := mux.NewRouter().StrictSlash(true)
-	for _, r := range routes {
-		h := logger(r.Handler, r.Name)
-		router.Methods(r.Method).Path(r.Pattern).Name(r.Name).Handler(h)
-	}
-	return router
-}
+// func newRouter() *mux.Router {
+// 	router := mux.NewRouter().StrictSlash(true)
+// 	for _, r := range routes {
+// 		h := logger(r.Handler, r.Name)
+// 		router.Methods(r.Method).Path(r.Pattern).Name(r.Name).Handler(h)
+// 	}
+// 	return router
+// }
 
-func logger(inner http.Handler, name string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		inner.ServeHTTP(w, r)
-		log.Printf("%s\t%s\t%s\t%s", r.Method, r.RequestURI, name, time.Since(start))
-	})
-}
+// func logger(inner http.Handler, name string) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		start := time.Now()
+// 		inner.ServeHTTP(w, r)
+// 		log.Printf("%s\t%s\t%s\t%s", r.Method, r.RequestURI, name, time.Since(start))
+// 	})
+// }
 
 // chatServer is used to implement helloworld.chatServer.
 type chatServer struct{}
 
+// Chat prints out a message recieved from another client.
 func (s *chatServer) Chat(ctx context.Context, in *pb.ChatRequest) (*pb.ChatResponse, error) {
 	md, ok := metadata.FromContext(ctx)
 	if !ok {
