@@ -25,10 +25,10 @@ message User {
   repeated int64 matches = 3;
 }
 
-message DebugListUsersRequest {
+message ListUsersRequest {
 }
 
-message DebugListUsersResponse {
+message ListUsersResponse {
   repeated User users = 1;
 }
 
@@ -48,12 +48,28 @@ message HistoryRequest {
 message HistoryResponse {
   repeated ChatRequest chatHistory = 1;    
 }
+
+message ConnectRequest {
+}
+message ConnectResponse {
+}
+
+message MatchesRequest {
+}
+message MatchesResponse {
+  repeated User users = 1;
+}
+
 service DatingGame {
-  rpc DebugListUsers (DebugListUsersRequest) returns (DebugListUsersResponse) {}
+  rpc ListUsers (ListUsersRequest) returns (ListUsersResponse) {}
   rpc SendChat(ChatRequest) returns (ChatResponse) {}
   rpc ChatHistory (HistoryRequest) returns (HistoryResponse) {}
+  // rpc Connect (ConnectRequest) returns (ConnectResponse) {}
+  rpc Matches (MatchesRequest) returns (MatchesResponse) {}
 }
 
 service ClientChat {
     rpc Chat (ChatRequest) returns (ChatResponse) {}
+    // rpc Match(MatchRequest) returns (MatchResponse) {}
+    // rpc Unmatch(MatchRequest) returns (MatchResponse) {}    
 }

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,7 +40,7 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 // datingGameServer is used to implement helloworld.datingGameServer.
 type datingGameServer struct{}
 
-func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListUsersRequest) (*pb.DebugListUsersResponse, error) {
+func (s *datingGameServer) ListUsers(ctx context.Context, in *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
 	// Create a User for every planet (and pluto?).  Each planet matches with the planet adjacent to it.
 	// var users = []*pb.User{
 	// 	{ID: 1, DisplayName: "Mercury", Matches: []int64{2}},
@@ -88,7 +89,7 @@ func (s *datingGameServer) DebugListUsers(ctx context.Context, in *pb.DebugListU
 		users = append(users, &user)
 	}
 
-	return &pb.DebugListUsersResponse{Users: users}, nil
+	return &pb.ListUsersResponse{Users: users}, nil
 }
 
 // SendChat takes a message from a client and sends it to another client.  The receiver is determined
@@ -270,6 +271,78 @@ func (s *datingGameServer) storeChatInDB(to, from string, msg *pb.ChatRequest) e
 	}
 
 	return nil
+}
+
+// Matches returns the matches for a specific client.  This function uses metadata
+// to determine whose mathces to send back.
+// TODO: Consider just passing the requester in the pb.MatchesRequest struct.
+func (s *datingGameServer) Matches(ctx context.Context, in *pb.MatchesRequest) (*pb.MatchesResponse, error) {
+	client, err := spanner.NewClient(ctx, "projects/askcarter-talks/instances/test-instance/databases/test-dating-game")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Close()
+
+	md, ok := metadata.FromContext(ctx)
+	if !ok {
+		log.Fatal("no metadata")
+	}
+	id := md["id"][0]
+	// id, _ := strconv.Atoi(md["id"][0])
+
+	row, err := client.Single().ReadRow(ctx, "users",
+		spanner.Key{id}, []string{"username", "matches"})
+	if err != nil {
+		return nil, err
+	}
+
+	var user pb.User
+	var matches []spanner.NullInt64
+	if err = row.Columns(&user.DisplayName, &matches); err != nil {
+		return nil, err
+	}
+	for _, v := range matches {
+		user.Matches = append(user.Matches, v.Int64)
+	}
+
+	if len(matches) == 0 {
+		return &pb.MatchesResponse{}, nil
+	}
+
+	str := "SELECT id, username, matches FROM users WHERE id IN ("
+	str += strings.Trim(strings.Join(strings.Fields(fmt.Sprint(user.Matches)), ","), "[]")
+	str += ")"
+
+	stmt := spanner.NewStatement(str)
+	// stmt.Params["keys"] = strings.Trim(strings.Join(strings.Fields(fmt.Sprint(user.Matches)), ","), "[]")
+	stmt.Params["keys"] = user.Matches
+	iter := client.Single().Query(ctx, stmt)
+	defer iter.Stop()
+
+	var users = []*pb.User{}
+	for {
+		row, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var user pb.User
+		var matches []spanner.NullInt64
+		if err := row.Columns(&user.ID, &user.DisplayName, &matches); err != nil {
+			return nil, err
+		}
+
+		for _, v := range matches {
+			user.Matches = append(user.Matches, v.Int64)
+		}
+
+		users = append(users, &user)
+	}
+
+	return &pb.MatchesResponse{Users: users}, nil
 }
 
 func main() {
