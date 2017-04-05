@@ -22,6 +22,14 @@ had to use https://github.com/grpc/homebrew-grpc to build (and add a few libs)
 then ran make grpc_cli
 https://chromium.googlesource.com/external/github.com/grpc/grpc-go/+/refs/heads/master/Documentation/server-reflection-tutorial.md
 
+#### calls
+```
+grpc_cli call localhost:8080 Matches "" --metadata "id:1"
+grpc_cli call localhost:8080 ListUsers ""
+grpc_cli call localhost:8080 SendChat "message: 'Why so blue?'" --metadata "from:Uranus:to:Neptune"
+grpc_cli call localhost:8080 ChatHistory "" --metadata "mark:Uranus#Neptune"
+```
+
 ### go generate?
 https://blog.golang.org/generate
 

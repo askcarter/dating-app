@@ -37,8 +37,20 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 	return &pb.HelloReply{Message: "Hello " + in.Name}, nil
 }
 
+type clientChatConn struct {
+	client pb.ClientChatClient
+	// I need to store this to close the connection or else the server
+	// will keep trying to connect to it.
+	conn *grpc.ClientConn
+}
+
 // datingGameServer is used to implement helloworld.datingGameServer.
-type datingGameServer struct{}
+type datingGameServer struct {
+	// This is temporary until the IP list is moved to the
+	// the database.  Otherwise this wouldn't be able to scale.
+	//
+	ConnMap map[string]clientChatConn
+}
 
 func (s *datingGameServer) ListUsers(ctx context.Context, in *pb.ListUsersRequest) (*pb.ListUsersResponse, error) {
 	// Create a User for every planet (and pluto?).  Each planet matches with the planet adjacent to it.
@@ -96,20 +108,6 @@ func (s *datingGameServer) ListUsers(ctx context.Context, in *pb.ListUsersReques
 // by the metadata associated with the request.
 // TODO: Return different errors codes, based on results.
 func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*pb.ChatResponse, error) {
-	/* TODO: Turn this into a list of open connections (added when users connect)
-	   and switch to streaming API. Remove connections when client disconnects. */
-	ips := map[string]string{
-		"Mercury": "localhost:18081",
-		"Venus":   "localhost:18082",
-		"Earth":   "localhost:18083",
-		"Mars":    "localhost:18084",
-		"Jupiter": "localhost:18085",
-		"Saturn":  "localhost:18086",
-		"Uranus":  "localhost:18087",
-		"Neptune": "localhost:18088",
-		"Pluto":   "localhost:18089",
-	}
-
 	// // streaming api
 	// headers, ok := metadata.FromContext(stream.Context())
 	// token := headers["authorization"]
@@ -129,29 +127,28 @@ func (s *datingGameServer) SendChat(ctx context.Context, in *pb.ChatRequest) (*p
 	from := md["from"][0]
 	fmt.Printf(" (%v -> %v): %#v\n", from, to, in.Message)
 
-	address := ips[to]
-
-	// Setup connection to chat server
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
-	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
-	defer conn.Close()
-
 	// Store message in spanner for later retrieval by clients.
-	err = s.storeChatInDB(to, from, in)
+	// TODO: Add a read field.  I think I can store the message
+	// after calling the gRPC chat function.  If the request errors
+	// out, then I'll say that message is unread.  Or, maybe I'll
+	// I have the frontend send a read receipt?  Might be simpler.
+	err := s.storeChatInDB(to, from, in)
 	if err != nil {
 		log.Fatal("error storing chat in DB:", err)
 	}
 
 	// Send message to client chat server.
-	c := pb.NewClientChatClient(conn)
+
+	// TODO: if the client isn't connected, don't send.
+	c, found := s.ConnMap[to]
+	if !found {
+		// TODO: return error message.
+		return nil, fmt.Errorf("No connection found in map for '%v'", to)
+	}
 	header := metadata.New(map[string]string{"from": from})
 	// this is the critical step that includes your headers
 	newCtx := metadata.NewContext(ctx, header)
-	return c.Chat(newCtx, &pb.ChatRequest{Message: in.Message})
-
-	// return &pb.ChatResponse{}, nil
+	return c.client.Chat(newCtx, &pb.ChatRequest{Message: in.Message})
 }
 
 // ChatHistory returns the history between two clients. The pb.HistoryRequest metadata tells the server which
@@ -225,6 +222,7 @@ func getSizeOfTable(ctx context.Context, db string) (int, error) {
 // the name of the two clients, as such: The key is in the format of '<lower id UserName>#<higher id UserName>'.
 // For example, if there were two users Mercury and Venus with IDs 1 and 2, respectively then the metadata sent
 // over would be "key:Mercury:Venus".
+// TODO: Add a 'Read' field.
 func (s *datingGameServer) storeChatInDB(to, from string, msg *pb.ChatRequest) error {
 	ctx, _ := context.WithTimeout(context.Background(), 1*time.Minute)
 
@@ -345,6 +343,29 @@ func (s *datingGameServer) Matches(ctx context.Context, in *pb.MatchesRequest) (
 	return &pb.MatchesResponse{Users: users}, nil
 }
 
+// Connect registers a client with the server.
+// TODO: rename to Register.
+func (s *datingGameServer) Connect(ctx context.Context, in *pb.ConnectRequest) (*pb.ConnectResponse, error) {
+	// Setup connection to chat server
+	conn, err := grpc.Dial(in.Address, grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("did not connect: %v", err)
+	}
+	s.ConnMap[in.UserName] = clientChatConn{client: pb.NewClientChatClient(conn), conn: conn}
+	fmt.Println("Registed " + in.UserName + ".")
+
+	return &pb.ConnectResponse{}, nil
+}
+
+// Disconnect unregisters a client with the server.
+// TODO: rename to Unregister.
+func (s *datingGameServer) Disconnect(ctx context.Context, in *pb.DisconnectRequest) (*pb.DisconnectResponse, error) {
+	s.ConnMap[in.UserName].conn.Close()
+	delete(s.ConnMap, in.UserName)
+	fmt.Println("Unregisted " + in.UserName + ".")
+	return &pb.DisconnectResponse{}, nil
+}
+
 func main() {
 	errChan := make(chan error, 10)
 
@@ -358,7 +379,9 @@ func main() {
 	}
 	// Creates a new gRPC server
 	s := grpc.NewServer()
-	pb.RegisterDatingGameServer(s, &datingGameServer{})
+	pb.RegisterDatingGameServer(s, &datingGameServer{
+		ConnMap: make(map[string]clientChatConn),
+	})
 	// Register reflection service on gRPC server.
 	reflection.Register(s)
 	/* TODO: should I gracefully shut down server with s.Stop() or s.GracefulStop()? */

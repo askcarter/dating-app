@@ -19,6 +19,8 @@ import (
 	pb "github.com/askcarter/dating-game/pb"
 	"github.com/askcarter/io16/app/handlers"
 
+	"time"
+
 	"github.com/braintree/manners"
 )
 
@@ -113,7 +115,23 @@ func main() {
 	}()
 	fmt.Println("open browser to http://localhost" + *port)
 
-	// Set up a connection to the server.
+	// Set up chat server.
+	lis, err := net.Listen("tcp", "localhost"+*chat)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	clientChatServer := grpc.NewServer()
+	/* TODO: should I gracefully shut down server with s.Stop() or s.GracefulStop()? */
+	pb.RegisterClientChatServer(clientChatServer, &chatServer{})
+	// Register reflection service on gRPC server.
+	reflection.Register(clientChatServer)
+	go func() {
+		errChan <- clientChatServer.Serve(lis)
+	}()
+	fmt.Println("Chat server started on http://localhost" + *chat)
+
+	// Set up a connection to the datingGameServer.
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -124,36 +142,41 @@ func main() {
 		fmt.Println("Closing connection to server server on " + address)
 		conn.Close()
 	}()
-	// c := pb.NewGreeterClient(conn)
 
-	// Set up chat server.
-	lis, err := net.Listen("tcp", "localhost"+*chat)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+	type planet struct {
+		displayName string
+		id          int64
 	}
-
-	s := grpc.NewServer()
-	/* TODO: should I gracefully shut down server with s.Stop() or s.GracefulStop()? */
-
-	pb.RegisterClientChatServer(s, &chatServer{})
-	// Register reflection service on gRPC server.
-	reflection.Register(s)
-
-	go func() {
-		errChan <- s.Serve(lis)
-	}()
-	fmt.Println("Chat server started on http://localhost" + *chat)
-
+	userNameList := map[string]planet{
+		":18081": {displayName: "Mercury", id: 1},
+		":18082": {displayName: "Venus", id: 2},
+		":18083": {displayName: "Earth", id: 3},
+		":18084": {displayName: "Mars", id: 4},
+		":18085": {displayName: "Jupiter", id: 5},
+		":18086": {displayName: "Saturn", id: 6},
+		":18087": {displayName: "Uranus", id: 7},
+		":18088": {displayName: "Neptune", id: 8},
+		":18089": {displayName: "Pluto", id: 9},
+	}
+	p := userNameList[*chat]
 	// // Contact the server and print out its response.
 	// name := defaultName
 	// if len(os.Args) > 1 {
 	// 	name = os.Args[1]
 	// }
-	// req, err := c.SayHello(context.Background(), &pb.HelloRequest{Name: name})
-	// if err != nil {
-	// 	log.Fatalf("could not greet: %v", err)
-	// }
-	// log.Printf("Greeting: %s", req.Message)
+
+	c := pb.NewDatingGameClient(conn)
+	_, err = c.Connect(context.Background(), &pb.ConnectRequest{UserName: p.displayName, Address: "localhost" + *chat})
+	if err != nil {
+		log.Fatalf("could not greet: %v", err)
+	}
+	log.Printf("Welcome %v\n", p.displayName)
+	log.Printf("Registered with dating game server.\n")
+	exitFunc := func() {
+		c.Disconnect(context.Background(), &pb.DisconnectRequest{UserName: p.displayName})
+		time.Sleep(time.Second * 2)
+		log.Printf("Unregistered with dating game server.\n")
+	}
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
@@ -161,12 +184,14 @@ func main() {
 	for {
 		select {
 		case err := <-errChan:
+			exitFunc()
 			if err != nil {
 				log.Fatal(err)
 			}
 		case s := <-signalChan:
+			exitFunc()
 			log.Println(fmt.Sprintf("Captured %v. Exiting...", s))
-			httpServer.BlockingClose()
+			// httpServer.BlockingClose()
 			os.Exit(0)
 		}
 	}

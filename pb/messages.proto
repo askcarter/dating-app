@@ -50,8 +50,16 @@ message HistoryResponse {
 }
 
 message ConnectRequest {
+  string userName = 1;
+  string Address = 2;
 }
 message ConnectResponse {
+}
+
+message DisconnectRequest {
+  string userName = 1;
+}
+message DisconnectResponse {
 }
 
 message MatchesRequest {
@@ -64,7 +72,8 @@ service DatingGame {
   rpc ListUsers (ListUsersRequest) returns (ListUsersResponse) {}
   rpc SendChat(ChatRequest) returns (ChatResponse) {}
   rpc ChatHistory (HistoryRequest) returns (HistoryResponse) {}
-  // rpc Connect (ConnectRequest) returns (ConnectResponse) {}
+  rpc Connect (ConnectRequest) returns (ConnectResponse) {}
+  rpc Disconnect (DisconnectRequest) returns (DisconnectResponse) {}
   rpc Matches (MatchesRequest) returns (MatchesResponse) {}
 }
 
